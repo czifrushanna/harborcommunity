@@ -105,6 +105,9 @@ already applied to vulnerability scanning, and the optimizer adapter contract
 deliberately reuses that architecture — registration storage, capability
 negotiation via consumed/produced MIME types, single-use robot accounts for
 registry pulls, and async job polling all mirror the scanner adapter framework.
+That reuse is currently architectural rather than literal: the optimizer framework
+mirrors the scanner one closely but shares no code with it. Whether the two should
+be merged into a single adapter framework is an open question — see Open issues.
 
 This approach has a few advantages:
 
@@ -241,6 +244,24 @@ implementing the contract could take its place.
 
 ## Open issues
 
+- **Optimizer and scanner adapter frameworks are duplicated** *(Harbor-side)*.
+  The optimizer registration framework mirrors the scanner one rather than
+  extending it: `optimizer_registration` is a parallel table, and
+  `src/pkg/optimizer` reproduces the structure of `src/pkg/scan` closely enough
+  that the registration DAO is three lines from identical and the manager is
+  ~80% the same. Only the report payloads and the optimize-specific controller
+  logic are genuinely distinct. This was a deliberate choice for the initial
+  implementation — it keeps the Harbor-side change purely additive, so an
+  experimental feature cannot destabilize the scan path — but it is not a good
+  end state. The natural consolidation is a shared adapter-registration package
+  (registration model, DAO, manager, REST transport and auth) that both
+  frameworks build on, keeping scanner capabilities and each contract's report
+  models where they are; the optimizer already reuses `pkg/scan/rest/auth`, so
+  the precedent exists. One snag to resolve first: both registrations are beego
+  ORM models with a fixed `TableName()`, so a single shared struct cannot back
+  two tables, and no embedded-struct ORM model exists in the codebase today —
+  the manager, controller and REST transport generalize cleanly, the DAO layer
+  needs a pattern Harbor has not used yet.
 - **Contract kept in sync by hand across two repositories** *(the
   Harbor/adapter boundary)*. Now that the reference adapter lives in its own
   repository, the wire contract (`src/pkg/optimizer/rest/v1/` in this repo,
